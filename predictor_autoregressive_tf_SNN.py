@@ -128,7 +128,7 @@ class predictor_autoregressive_tf_SNN:
         self.net_initial_input_without_Q_TF = tf.convert_to_tensor(self.net_initial_input_without_Q, tf.float32)
         self.net_initial_input_without_Q_TF = tf.reshape(self.net_initial_input_without_Q_TF, [-1, len(self.net_info.inputs[1:])])
         if prediction_denorm:
-            self.prediction_denorm=True
+            self.prediction_denorm = True
         else:
             self.prediction_denorm = False
 
@@ -151,6 +151,10 @@ class predictor_autoregressive_tf_SNN:
         # Denormalize
         output_array[..., 1:, [STATE_INDICES.get(key) for key in self.net_info.outputs]] = \
             denormalize_numpy_array(net_outputs.numpy(), self.net_info.outputs, self.normalization_info)
+        #output_array[..., 1:, [STATE_INDICES.get(key) for key in self.net_info.outputs]] = \
+            #denormalize_numpy_array(net_outputs, self.net_info.outputs, self.normalization_info)
+
+        #print(output_array)
 
         # Augment
         #augment_predictor_output(output_array, self.net_info)
@@ -186,6 +190,7 @@ class predictor_autoregressive_tf_SNN:
             horizon = self.horizon
 
         net_outputs = tf.TensorArray(tf.float32, size=horizon)
+        #net_outputs = np.zeros(shape=(1,horizon,len(self.net_info.outputs)))
         net_output = tf.zeros(shape=(len(self.net_info.outputs)), dtype=tf.float32)
 
         for i in tf.range(0, horizon):
@@ -201,19 +206,24 @@ class predictor_autoregressive_tf_SNN:
             #net_input = net_input[0,0,:]
             #net_input = np.zeros((len(self.net_info.inputs)))
             net_output = self.evaluate_net(net_input)
+            #print(net_output.shape)
 
             net_output = tf.convert_to_tensor(net_output, np.float32)
             #tf.print(net_output)
 
             net_output = tf.reshape(net_output, [-1, len(self.net_info.outputs)])
+            #net_output = np.reshape(net_output, (-1, len(self.net_info.outputs)))
             #tf.print(net_output)
-            print(net_output.shape)
+            #print(net_output.shape)
 
             net_outputs = net_outputs.write(i, net_output)
-            tf.print(net_outputs)
+            #net_outputs[:,i,:] = net_output
+            #tf.print(net_outputs)
             # tf.print(net_inout.read(i+1))
+
         # print(net_inout)
         net_outputs = tf.transpose(net_outputs.stack(), perm=[1, 0, 2])
+        #print(net_outputs.shape)
 
         return net_outputs
 

@@ -63,6 +63,8 @@ def get_data_for_gui_TF(a, dataset, net_name):
             predictor.update_internal_state(Q_current_timestep[0, 0])
 
     output_array = output_array[..., [STATE_INDICES.get(key) for key in a.features]+[-1]]
+    #print(output_array.shape) # shape = (161,41,7)
+    #print(output_array)
 
     # time_axis is a time axis for ground truth
     return output_array
