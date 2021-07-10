@@ -62,6 +62,8 @@ config = yaml.load(open(os.path.join('SI_Toolkit_ApplicationSpecificFiles', 'con
 NET_NAME = config['modeling']['NET_NAME']
 PATH_TO_MODELS = config["paths"]["PATH_TO_EXPERIMENT_RECORDINGS"] + config['paths']['path_to_experiment'] + "Models/"
 
+PATH_TO_SNN_WEIGHTS = 'weights_latest.npy'
+
 class predictor_autoregressive_tf_SNN:
     def __init__(self, horizon=None, batch_size=None, net_name=None):
 
@@ -79,7 +81,9 @@ class predictor_autoregressive_tf_SNN:
         seed = 4
         n_neurons = 500
         weights = 0.00003*np.ones((len(self.net_info.outputs), n_neurons)) # Weights should be read from file (pre-trained model)
+        #weights = np.load(PATH_TO_SNN_WEIGHTS)
         self.net = snn.Predictor(weights=weights, seed=seed, n_neurons=n_neurons, c_init=np.zeros((len(self.net_info.inputs))))
+        self.ens = self.net.ens
 
         self.normalization_info = get_norm_info_for_net(self.net_info)
 
@@ -115,6 +119,14 @@ class predictor_autoregressive_tf_SNN:
             self.iterate_net = self.iterate_net_f
 
         print('Init done')
+
+    def load_SNN_internal_states(self, ens):
+
+        volt_array = np.asarray(self.net.sim.signals[self.net.sim.model.sig[self.net.ens.neurons]['voltage']])
+        refa_array = np.asarray(self.net.sim.signals[self.net.sim.model.sig[self.net.ens.neurons]['refractory_time']])
+
+        return volt_array, refa_array
+
 
     def setup(self, initial_state: np.array, prediction_denorm=True):
 

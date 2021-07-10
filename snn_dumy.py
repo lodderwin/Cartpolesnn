@@ -81,6 +81,7 @@ class Predictor(object):
 
 
         self.sim = nengo.Simulator(self.model, dt=0.001, progress_bar=False)
+        self.ens = ens
 
     def step(self, c):
         self.c[:] = c
