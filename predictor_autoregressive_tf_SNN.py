@@ -55,14 +55,15 @@ import yaml, os
 
 import tensorflow as tf
 
-import SI_Toolkit.TF.TF_Functions.snn_dumy as snn
+#import SI_Toolkit.TF.TF_Functions.snn_dumy as snn
+import SI_Toolkit.TF.TF_Functions.snn_ldn as snn
 
 config = yaml.load(open(os.path.join('SI_Toolkit_ApplicationSpecificFiles', 'config.yml'), 'r'), Loader=yaml.FullLoader)
 
 NET_NAME = config['modeling']['NET_NAME']
 PATH_TO_MODELS = config["paths"]["PATH_TO_EXPERIMENT_RECORDINGS"] + config['paths']['path_to_experiment'] + "Models/"
 
-PATH_TO_SNN_WEIGHTS = 'weights_latest.npy'
+PATH_TO_SNN_WEIGHTS = r'.\weights_latest.npy'
 
 class predictor_autoregressive_tf_SNN:
     def __init__(self, horizon=None, batch_size=None, net_name=None):
@@ -78,11 +79,34 @@ class predictor_autoregressive_tf_SNN:
         # Create a copy of the network suitable for inference (stateful and with sequence length one)
         self.net_info = snn.NetInfo()
 
-        seed = 4
-        n_neurons = 500
-        weights = 0.00003*np.ones((len(self.net_info.outputs), n_neurons)) # Weights should be read from file (pre-trained model)
-        #weights = np.load(PATH_TO_SNN_WEIGHTS)
-        self.net = snn.Predictor(weights=weights, seed=seed, n_neurons=n_neurons, c_init=np.zeros((len(self.net_info.inputs))))
+        samp_freq = 50  # cartpole data is recorded at ~50Hz
+        dt = 0.001  # nengo time step
+        learning_rate = 0  # lr
+        t_delay = 0.02  # how far to predict the future (initial guess)
+        neurons_per_dim = 50  # number of neurons representing each dimension
+        seed = 4  # to get reproducible neuron properties across runs
+        lmu_theta = 0.1  # duration of the LMU delay
+        lmu_q = 5  # number of factorizations per dim in LMU
+
+        #weights = 0.00003*np.ones((len(self.net_info.outputs), n_neurons)) # Weights should be read from file (pre-trained model)
+        weights = np.load(PATH_TO_SNN_WEIGHTS)
+        #print(weights.shape)
+
+        #print(self.net_info.ctrl_inputs)
+        #print(self.net_info.state_inputs)
+        #print(self.net_info.inputs)
+        #self.net = snn.Predictor(weights=weights, seed=seed, n_neurons=n_neurons, c_init=np.zeros((len(self.net_info.inputs))))
+        self.net = snn.Predictor(action_init=np.zeros((len(self.net_info.ctrl_inputs))),
+                    state_init=np.zeros((len(self.net_info.state_inputs))),
+                    weights=weights,
+                    seed=seed,
+                    n=neurons_per_dim,
+                    samp_freq=samp_freq,
+                    t_delay=t_delay,
+                    lmu_theta=lmu_theta,
+                    lmu_q=lmu_q,
+                    dt=dt,
+                )
         self.ens = self.net.ens
 
         self.normalization_info = get_norm_info_for_net(self.net_info)
@@ -189,7 +213,8 @@ class predictor_autoregressive_tf_SNN:
                                     [-1, 1, len(self.net_info.inputs)])).numpy()
         # self.evaluate_net(self.net_current_input) # Using tf.function to compile net
         #self.net(net_input)  # Using net directly
-        self.net.step(net_input)  # Using net directly
+        #self.net.step(c=net_input)
+        self.net.step(a=net_input[:,:,0],s=net_input[:,:,1:])  # Using net directly
 
         #self.rnn_internal_states = get_internal_states(self.net)
 
@@ -243,8 +268,11 @@ class predictor_autoregressive_tf_SNN:
     def evaluate_net_f(self, net_input):
         # print('retracing evaluate_net_f')
         #net_output = self.net(net_input)
-        c = net_input
-        net_output = self.net.step(c=c)
+        #c = net_input
+        #net_output = self.net.step(c=c)
+        a = net_input[:,:,0]
+        s = net_input[:,:,1:]
+        net_output = self.net.step(a=a,s=s)
         return net_output
 
     @property
