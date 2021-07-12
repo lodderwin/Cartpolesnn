@@ -64,7 +64,7 @@ NET_NAME = config['modeling']['NET_NAME']
 PATH_TO_MODELS = config["paths"]["PATH_TO_EXPERIMENT_RECORDINGS"] + config['paths']['path_to_experiment'] + "Models/"
 
 #PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\weights_latest_LMU2.npy'
-PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\weights_latest_LMU3.npy'      # Uses Predictor_LMU2
+PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\model_weights_new.npy'      # Uses Predictor_LMU2
 
 class predictor_autoregressive_tf_SNN:
     def __init__(self, horizon=None, batch_size=None, net_name=None):
@@ -148,12 +148,8 @@ class predictor_autoregressive_tf_SNN:
 
         print('Init done')
 
-    def load_SNN_internal_states(self, ens):
-
-        volt_array = np.asarray(self.net.sim.signals[self.net.sim.model.sig[self.net.ens.neurons]['voltage']])
-        refa_array = np.asarray(self.net.sim.signals[self.net.sim.model.sig[self.net.ens.neurons]['refractory_time']])
-
-        return volt_array, refa_array
+        self.snn_internal_states_voltage = self.net.return_internal_states('voltage')
+        self.snn_internal_states_refractory = self.net.return_internal_states('refractory_time')
 
 
     def setup(self, initial_state: np.array, prediction_denorm=True):
@@ -185,6 +181,9 @@ class predictor_autoregressive_tf_SNN:
 
         # load internal RNN state if applies
         #load_internal_states(self.net, self.rnn_internal_states)
+        self.net.set_internal_states(self.snn_internal_states_voltage, 'voltage')
+        self.net.set_internal_states(self.snn_internal_states_refractory, 'refractory_time')
+
 
         net_outputs = self.iterate_net(Q, single_step=single_step)
 
@@ -221,6 +220,9 @@ class predictor_autoregressive_tf_SNN:
         #self.net(net_input)    # Using net directly
         #self.net.step(c=net_input)     # Using net directly
         self.net.step(a=net_input[:,:,0],s=net_input[:,:,1:])   # Using net directly
+
+        self.snn_internal_states_voltage = self.net.return_internal_states('voltage')
+        self.snn_internal_states_refractory = self.net.return_internal_states('refractory_time')
 
         #self.rnn_internal_states = get_internal_states(self.net)
 

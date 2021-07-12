@@ -138,7 +138,7 @@ class Predictor(object):
 
             # make the hidden layer
             ens = nengo.Ensemble(n_neurons=n * 5, dimensions=5,
-                                     neuron_type=nengo.LIFRate(), seed=seed)
+                                     neuron_type=nengo.LIF(), seed=seed)
             nengo.Connection(a, ens[0])
             nengo.Connection(s, ens[1:])
 
@@ -158,6 +158,12 @@ class Predictor(object):
         self.s[:] = s
         self.sim.run(self.dt)
         return self.z_pred
+
+    def return_internal_states(self, key):
+        return np.asarray(self.sim.signals[self.sim.model.sig[self.ens.neurons][key]])
+
+    def set_internal_states(self, internal_states, key):
+        self.sim.signals[self.sim.model.sig[self.ens.neurons][key]] = internal_states
 
     def reset(self):
         self.sim.reset()
@@ -203,7 +209,7 @@ class Predictor_LMU(object):
 
             # make the hidden layer
             ens = nengo.Ensemble(n_neurons=n * self.in_sz, dimensions=self.in_sz * lmu_q,
-                                     neuron_type=nengo.LIFRate(), seed=seed)
+                                     neuron_type=nengo.LIF(), seed=seed)
 
             # How do I connect each lmu to one dimension of ens?
             nengo.Connection(ldn, ens)
@@ -224,6 +230,13 @@ class Predictor_LMU(object):
         self.s[:] = s
         self.sim.run(self.dt)
         return self.z_pred
+
+    def return_internal_states(self, key):
+        return np.asarray(self.sim.signals[self.sim.model.sig[self.ens.neurons][key]])
+
+    def set_internal_states(self, internal_states, key):
+        self.sim.signals[self.sim.model.sig[self.ens.neurons][key]] = internal_states
+
 
     def reset(self):
         self.sim.reset()
@@ -268,7 +281,7 @@ class Predictor_LMU2(object):
 
             # make the hidden layer
             ens = nengo.Ensemble(n_neurons=n * self.in_sz * (1 + lmu_q), dimensions=self.in_sz * (1 + lmu_q),
-                                 neuron_type=nengo.LIFRate(), seed=seed, radius=radius)
+                                 neuron_type=nengo.LIF(), seed=seed, radius=radius)
 
             # How do I connect each lmu to one dimension of ens?
             nengo.Connection(a, ens[:1])
@@ -291,6 +304,13 @@ class Predictor_LMU2(object):
         self.s[:] = s
         self.sim.run(self.dt)
         return self.z_pred
+
+    def return_internal_states(self, key):
+        return np.asarray(self.sim.signals[self.sim.model.sig[self.ens.neurons][key]])
+
+    def set_internal_states(self, internal_states, key):
+        self.sim.signals[self.sim.model.sig[self.ens.neurons][key]] = internal_states
+
 
     def reset(self):
         self.sim.reset()
