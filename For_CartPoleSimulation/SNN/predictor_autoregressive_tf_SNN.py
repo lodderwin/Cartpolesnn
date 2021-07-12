@@ -197,7 +197,7 @@ class predictor_autoregressive_tf_SNN:
         #print(output_array)
 
         # Augment
-        #augment_predictor_output(output_array, self.net_info)
+        augment_predictor_output(output_array, self.net_info)
 
         return output_array
 

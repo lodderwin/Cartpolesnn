@@ -3,7 +3,7 @@
 1 - Path to files in master CartpoleSimulation:
 	.\CartPoleSimulation\SI_Toolkit\Testing\Testing_Functions\get_prediction_TF_predictor.py
 
-	.\CartPoleSimulation\SI_Toolkit\SI_Toolkit_ApplicationSpecificFiles_Template\config.yml
+	.\CartPoleSimulation\SI_Toolkit_ApplicationSpecificFiles\config.yml
 
 	.\CartPoleSimulation\SNN\predictor_autoregressive_tf_SNN.py
 	.\CartPoleSimulation\SNN\snn_dumy.py
