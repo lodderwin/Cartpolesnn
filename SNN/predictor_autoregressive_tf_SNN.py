@@ -55,15 +55,16 @@ import yaml, os
 
 import tensorflow as tf
 
-#import SI_Toolkit.TF.TF_Functions.snn_dumy as snn
-import SI_Toolkit.TF.TF_Functions.snn_ldn as snn
+#import SNN.snn_dumy as snn
+import SNN.snn_lmu as snn
 
 config = yaml.load(open(os.path.join('SI_Toolkit_ApplicationSpecificFiles', 'config.yml'), 'r'), Loader=yaml.FullLoader)
 
 NET_NAME = config['modeling']['NET_NAME']
 PATH_TO_MODELS = config["paths"]["PATH_TO_EXPERIMENT_RECORDINGS"] + config['paths']['path_to_experiment'] + "Models/"
 
-PATH_TO_SNN_WEIGHTS = r'.\weights_latest.npy'
+#PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\weights_latest_LMU2.npy'
+PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\weights_latest_LMU3.npy'      # Uses Predictor_LMU2
 
 class predictor_autoregressive_tf_SNN:
     def __init__(self, horizon=None, batch_size=None, net_name=None):
@@ -83,10 +84,11 @@ class predictor_autoregressive_tf_SNN:
         dt = 0.001  # nengo time step
         learning_rate = 0  # lr
         t_delay = 0.02  # how far to predict the future (initial guess)
-        neurons_per_dim = 50  # number of neurons representing each dimension
         seed = 4  # to get reproducible neuron properties across runs
         lmu_theta = 0.1  # duration of the LMU delay
         lmu_q = 5  # number of factorizations per dim in LMU
+
+        neurons_per_dim = 50  # number of neurons representing each dimension
 
         #weights = 0.00003*np.ones((len(self.net_info.outputs), n_neurons)) # Weights should be read from file (pre-trained model)
         weights = np.load(PATH_TO_SNN_WEIGHTS)
@@ -95,8 +97,10 @@ class predictor_autoregressive_tf_SNN:
         #print(self.net_info.ctrl_inputs)
         #print(self.net_info.state_inputs)
         #print(self.net_info.inputs)
+
         #self.net = snn.Predictor(weights=weights, seed=seed, n_neurons=n_neurons, c_init=np.zeros((len(self.net_info.inputs))))
-        self.net = snn.Predictor(action_init=np.zeros((len(self.net_info.ctrl_inputs))),
+
+        self.net = snn.Predictor_LMU2(action_init=np.zeros((len(self.net_info.ctrl_inputs))),
                     state_init=np.zeros((len(self.net_info.state_inputs))),
                     weights=weights,
                     seed=seed,
@@ -187,9 +191,9 @@ class predictor_autoregressive_tf_SNN:
         # Denormalize
         output_array[..., 1:, [STATE_INDICES.get(key) for key in self.net_info.outputs]] = \
             denormalize_numpy_array(net_outputs.numpy(), self.net_info.outputs, self.normalization_info)
-        #output_array[..., 1:, [STATE_INDICES.get(key) for key in self.net_info.outputs]] = \
-            #denormalize_numpy_array(net_outputs, self.net_info.outputs, self.normalization_info)
+        #output_array[..., 1:, [STATE_INDICES.get(key) for key in self.net_info.outputs]] = net_outputs.numpy()
 
+        #print(output_array.shape)
         #print(output_array)
 
         # Augment
@@ -211,10 +215,12 @@ class predictor_autoregressive_tf_SNN:
         else:
             net_input = (tf.reshape(tf.concat([Q0, self.net_initial_input_without_Q_TF], axis=1),
                                     [-1, 1, len(self.net_info.inputs)])).numpy()
+
         # self.evaluate_net(self.net_current_input) # Using tf.function to compile net
-        #self.net(net_input)  # Using net directly
-        #self.net.step(c=net_input)
-        self.net.step(a=net_input[:,:,0],s=net_input[:,:,1:])  # Using net directly
+
+        #self.net(net_input)    # Using net directly
+        #self.net.step(c=net_input)     # Using net directly
+        self.net.step(a=net_input[:,:,0],s=net_input[:,:,1:])   # Using net directly
 
         #self.rnn_internal_states = get_internal_states(self.net)
 
@@ -269,7 +275,9 @@ class predictor_autoregressive_tf_SNN:
         # print('retracing evaluate_net_f')
         #net_output = self.net(net_input)
         #c = net_input
+
         #net_output = self.net.step(c=c)
+        #self.net.reset()
         a = net_input[:,:,0]
         s = net_input[:,:,1:]
         net_output = self.net.step(a=a,s=s)

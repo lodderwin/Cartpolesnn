@@ -9,7 +9,7 @@ except ModuleNotFoundError:
     print('SI_Toolkit_ApplicationSpecificFiles not yet created')
 
 from SI_Toolkit.TF.TF_Functions.predictor_autoregressive_tf import predictor_autoregressive_tf
-from SI_Toolkit.TF.TF_Functions.predictor_autoregressive_tf_SNN import predictor_autoregressive_tf_SNN
+from SNN.predictor_autoregressive_tf_SNN import predictor_autoregressive_tf_SNN
 
 # This import mus go before pyplot so also before our scripts
 from matplotlib import use, get_backend
@@ -58,7 +58,10 @@ def get_data_for_gui_TF(a, dataset, net_name):
         for timestep in trange(a.test_len):
             Q_current_timestep = Q_array[np.newaxis, timestep, :]
             s_current_timestep = states_0[timestep, np.newaxis]
+
             predictor.setup(initial_state=s_current_timestep, prediction_denorm=True)
+            #predictor.setup(initial_state=s_current_timestep, prediction_denorm=False)
+
             output_array[timestep,:,:] = predictor.predict(Q_current_timestep)
             predictor.update_internal_state(Q_current_timestep[0, 0])
 

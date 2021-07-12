@@ -106,6 +106,65 @@ class LDN(nengo.Process):
 # -----------------------------------------------------------------------------------------------------------------------
 
 class Predictor(object):
+    def __init__(self, action_init, state_init, weights=None, seed=42, n=100, samp_freq=50,
+               t_delay=0.02, learning_rate=5e-5, dt=0.001):
+        self.model = nengo.Network()
+        self.model.config[nengo.Connection].synapse = None
+
+        self.a = np.array(action_init)
+        self.s = np.array(state_init)
+
+        self.dt = dt
+        self.in_sz = (len(self.s) + len(self.a))
+
+        self.weights = weights
+        if self.weights is None:
+            self.weights = np.zeros((len(self.s), n * self.in_sz))
+
+        self.z_pred = np.zeros(weights.shape[0])
+
+        with self.model:
+            a = nengo.Node(lambda t: self.a)
+            s = nengo.Node(lambda t: self.s)
+
+            def set_z_pred(t, x):
+                self.z_pred[:] = x
+
+            # the value to be predicted (which in this case is just the first dimension of the input)
+            z = nengo.Node(None, size_in=4)
+            nengo.Connection(s, z)
+
+            z_pred = nengo.Node(None, size_in=4)
+
+            # make the hidden layer
+            ens = nengo.Ensemble(n_neurons=n * 5, dimensions=5,
+                                     neuron_type=nengo.LIFRate(), seed=seed)
+            nengo.Connection(a, ens[0])
+            nengo.Connection(s, ens[1:])
+
+            # make the output weights we can learn
+            conn = nengo.Connection(ens.neurons, z_pred,
+                                    transform=weights,  # change this if you have pre-recorded weights to use
+                                    learning_rule_type=nengo.PES(learning_rate=learning_rate,
+                                                                pre_synapse=DiscreteDelay(t_delay)
+                                                                # delay the activity value when updating weights
+                                                                ))
+
+            self.sim = nengo.Simulator(self.model, dt=self.dt, progress_bar=False)
+            self.ens = ens
+
+    def step(self, a, s):
+        self.a[:] = a
+        self.s[:] = s
+        self.sim.run(self.dt)
+        return self.z_pred
+
+    def reset(self):
+        self.sim.reset()
+
+# -----------------------------------------------------------------------------------------------------------------------
+
+class Predictor_LMU(object):
     def __init__(self, action_init, state_init, weights=None, seed=42, n=100, samp_freq=50, lmu_theta=0.1, lmu_q=20,
     t_delay=0.02, learning_rate=0, radius=1.5, dt = 0.001):
 
@@ -114,7 +173,72 @@ class Predictor(object):
 
         self.a = np.array(action_init)
         self.s = np.array(state_init)
+
+        self.dt = dt
+        self.in_sz = (len(self.s) + len(self.a))
+
+        self.weights = weights
+        if self.weights is None:
+            self.weights = np.zeros((len(self.s), n * self.in_sz))
+
         self.z_pred = np.zeros(weights.shape[0])
+
+        with self.model:
+            a = nengo.Node(lambda t: self.a)
+            s = nengo.Node(lambda t: self.s)
+
+            def set_z_pred(t, x):
+                self.z_pred[:] = x
+
+            # the value to be predicted (which in this case is just the first dimension of the input)
+            z = nengo.Node(None, size_in=len(self.s))
+            nengo.Connection(s, z)
+
+            z_pred = nengo.Node(set_z_pred, size_in=len(self.s))
+
+            ldn = nengo.Node(LDN(theta=lmu_theta, q=lmu_q, size_in=self.in_sz))
+
+            nengo.Connection(a, ldn[0])
+            nengo.Connection(s, ldn[1:])
+
+            # make the hidden layer
+            ens = nengo.Ensemble(n_neurons=n * self.in_sz, dimensions=self.in_sz * lmu_q,
+                                     neuron_type=nengo.LIFRate(), seed=seed)
+
+            # How do I connect each lmu to one dimension of ens?
+            nengo.Connection(ldn, ens)
+
+            # make the output weights we can learn
+            conn = nengo.Connection(ens.neurons, z_pred,
+                                    transform=weights,  # change this if you have pre-recorded weights to use
+                                    learning_rule_type=nengo.PES(learning_rate=learning_rate,
+                                                                 pre_synapse=DiscreteDelay(t_delay)
+                                                                 # delay the activity value when updating weights
+                                                                 ))
+
+            self.sim = nengo.Simulator(self.model, dt=self.dt, progress_bar=False)
+            self.ens = ens
+
+    def step(self, a, s):
+        self.a[:] = a
+        self.s[:] = s
+        self.sim.run(self.dt)
+        return self.z_pred
+
+    def reset(self):
+        self.sim.reset()
+
+# -----------------------------------------------------------------------------------------------------------------------
+
+class Predictor_LMU2(object):
+    def __init__(self, action_init, state_init, weights=None, seed=42, n=100, samp_freq=50, lmu_theta=0.1, lmu_q=20,
+    t_delay=0.02, learning_rate=0, radius=1.5, dt = 0.001):
+
+        self.model = nengo.Network()
+        self.model.config[nengo.Connection].synapse = None
+
+        self.a = np.array(action_init)
+        self.s = np.array(state_init)
 
         self.dt = dt
         self.in_sz = (len(self.s)+len(self.a))
@@ -122,6 +246,8 @@ class Predictor(object):
         self.weights = weights
         if self.weights is None:
             self.weights = np.zeros((len(self.s), n * self.in_sz * (1 + lmu_q)))
+
+        self.z_pred = np.zeros(weights.shape[0])
 
         with self.model:
             a = nengo.Node(lambda t: self.a)
