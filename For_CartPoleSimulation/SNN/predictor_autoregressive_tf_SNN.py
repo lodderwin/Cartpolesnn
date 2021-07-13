@@ -81,7 +81,7 @@ class predictor_autoregressive_tf_SNN:
         self.net_info = snn.NetInfo()
 
         samp_freq = 50  # cartpole data is recorded at ~50Hz
-        dt = 0.001  # nengo time step
+        dt = 0.01  # nengo time step
         learning_rate = 0  # lr
         t_delay = 0.02  # how far to predict the future (initial guess)
         seed = 4  # to get reproducible neuron properties across runs
