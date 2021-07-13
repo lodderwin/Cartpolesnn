@@ -64,6 +64,7 @@ NET_NAME = config['modeling']['NET_NAME']
 PATH_TO_MODELS = config["paths"]["PATH_TO_EXPERIMENT_RECORDINGS"] + config['paths']['path_to_experiment'] + "Models/"
 
 #PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\weights_latest_LMU2.npy'
+#PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\weights_latest_LMU3.npy'
 PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\model_weights_new.npy'      # Uses Predictor_LMU2
 
 class predictor_autoregressive_tf_SNN:
@@ -81,14 +82,14 @@ class predictor_autoregressive_tf_SNN:
         self.net_info = snn.NetInfo()
 
         samp_freq = 50  # cartpole data is recorded at ~50Hz
-        dt = 0.001  # nengo time step
+        dt = 0.01  # nengo time step
         learning_rate = 0  # lr
         t_delay = 0.02  # how far to predict the future (initial guess)
         seed = 4  # to get reproducible neuron properties across runs
         lmu_theta = 0.1  # duration of the LMU delay
         lmu_q = 5  # number of factorizations per dim in LMU
 
-        neurons_per_dim = 50  # number of neurons representing each dimension
+        neurons_per_dim = 100  # number of neurons representing each dimension
 
         #weights = 0.00003*np.ones((len(self.net_info.outputs), n_neurons)) # Weights should be read from file (pre-trained model)
         weights = np.load(PATH_TO_SNN_WEIGHTS)
@@ -188,8 +189,11 @@ class predictor_autoregressive_tf_SNN:
         net_outputs = self.iterate_net(Q, single_step=single_step)
 
         # Denormalize
+        #output_array[..., 1:, [STATE_INDICES.get(key) for key in self.net_info.outputs]] = \
+            #denormalize_numpy_array(net_outputs.numpy(), self.net_info.outputs, self.normalization_info)
         output_array[..., 1:, [STATE_INDICES.get(key) for key in self.net_info.outputs]] = \
-            denormalize_numpy_array(net_outputs.numpy(), self.net_info.outputs, self.normalization_info)
+            denormalize_numpy_array(net_outputs, self.net_info.outputs, self.normalization_info)
+
         #output_array[..., 1:, [STATE_INDICES.get(key) for key in self.net_info.outputs]] = net_outputs.numpy()
 
         #print(output_array.shape)
@@ -234,9 +238,11 @@ class predictor_autoregressive_tf_SNN:
         else:
             horizon = self.horizon
 
-        net_outputs = tf.TensorArray(tf.float32, size=horizon)
-        #net_outputs = np.zeros(shape=(1,horizon,len(self.net_info.outputs)))
+        #net_outputs = tf.TensorArray(tf.float32, size=horizon)
+        net_outputs = np.zeros(shape=(self.batch_size,horizon,len(self.net_info.outputs)))
         net_output = tf.zeros(shape=(len(self.net_info.outputs)), dtype=tf.float32)
+
+        #print(net_output.shape)
 
         for i in tf.range(0, horizon):
             Q_current = Q[..., i]
@@ -246,28 +252,31 @@ class predictor_autoregressive_tf_SNN:
             else:
                     net_input = tf.reshape(tf.concat([Q_current, net_output], axis=1), [-1, 1, len(self.net_info.inputs)]).numpy()
 
+            #print(net_input.shape)  # For GUI is (2000,1,6)
+
             #net_output = self.net(net_input)
 
-            #net_input = net_input[0,0,:]
-            #net_input = np.zeros((len(self.net_info.inputs)))
-            net_output = self.evaluate_net(net_input)
-            #print(net_output.shape)
+            for batch in range(self.batch_size):
+                #net_input = net_input[0,0,:]
+                #net_input = np.zeros((len(self.net_info.inputs)))
+                net_output = self.evaluate_net(net_input)
+                #print(net_output.shape)
 
-            net_output = tf.convert_to_tensor(net_output, np.float32)
-            #tf.print(net_output)
+                net_output = tf.convert_to_tensor(net_output, np.float32)
+                #tf.print(net_output)
 
-            net_output = tf.reshape(net_output, [-1, len(self.net_info.outputs)])
-            #net_output = np.reshape(net_output, (-1, len(self.net_info.outputs)))
-            #tf.print(net_output)
-            #print(net_output.shape)
+                net_output = tf.reshape(net_output, [-1, len(self.net_info.outputs)])
+                #net_output = np.reshape(net_output, (-1, len(self.net_info.outputs)))
+                #tf.print(net_output)
+                #print(net_output.shape)
 
-            net_outputs = net_outputs.write(i, net_output)
-            #net_outputs[:,i,:] = net_output
-            #tf.print(net_outputs)
-            # tf.print(net_inout.read(i+1))
+                #net_outputs = net_outputs.write(i, net_output)
+                net_outputs[batch,i,:] = net_output.numpy()
+                #tf.print(net_outputs)
+                # tf.print(net_inout.read(i+1))
 
         # print(net_inout)
-        net_outputs = tf.transpose(net_outputs.stack(), perm=[1, 0, 2])
+        #net_outputs = tf.transpose(net_outputs.stack(), perm=[1, 0, 2])
         #print(net_outputs.shape)
 
         return net_outputs
