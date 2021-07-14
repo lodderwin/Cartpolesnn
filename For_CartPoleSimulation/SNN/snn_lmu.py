@@ -32,6 +32,27 @@ class NetInfo():
 
 #-----------------------------------------------------------------------------------------------------------------------
 
+def minmax(invalues, bound):
+    '''Scale the input to [-1, 1]'''
+    out =  2 * (invalues + bound) / (2*bound) - 1
+    return out
+
+#-----------------------------------------------------------------------------------------------------------------------
+
+def scale_datasets(data, scales):
+    '''Scale inputs in a list of datasets to -1, 1'''
+
+    # Scale all datasets to [-1, 1] based on the maximum value found above
+    bounds = []
+    for var, bound in scales.items():
+        bounds.append(bound)
+    for ii in range(len(bounds)):
+        data[:,ii] = minmax(data[:,ii], bounds[ii])
+
+    return data
+
+#-----------------------------------------------------------------------------------------------------------------------
+
 class DiscreteDelay(nengo.synapses.Synapse):
     def __init__(self, delay, size_in=1):
         self.delay = delay
@@ -127,8 +148,8 @@ class Predictor(object):
             a = nengo.Node(lambda t: self.a)
             s = nengo.Node(lambda t: self.s)
 
-            def set_z_pred(t, x):
-                self.z_pred[:] = x
+            #def set_z_pred(t, x):
+                #self.z_pred[:] = x
 
             # the value to be predicted (which in this case is just the first dimension of the input)
             z = nengo.Node(None, size_in=4)
@@ -244,7 +265,7 @@ class Predictor_LMU(object):
 # -----------------------------------------------------------------------------------------------------------------------
 
 class Predictor_LMU2(object):
-    def __init__(self, action_init, state_init, weights=None, seed=42, n=100, samp_freq=50, lmu_theta=0.1, lmu_q=20,
+    def __init__(self, action_init, state_init, scales, weights=None, seed=42, n=100, samp_freq=50, lmu_theta=0.1, lmu_q=20,
     t_delay=0.02, learning_rate=0, radius=1.5, dt = 0.001):
 
         self.model = nengo.Network()
@@ -261,6 +282,8 @@ class Predictor_LMU2(object):
             self.weights = np.zeros((len(self.s), n * self.in_sz * (1 + lmu_q)))
 
         self.z_pred = np.zeros(weights.shape[0])
+
+        self.scales = scales
 
         with self.model:
             a = nengo.Node(lambda t: self.a)
@@ -301,6 +324,7 @@ class Predictor_LMU2(object):
 
     def step(self, a, s):
         self.a[:] = a
+        #self.s[:] = scale_datasets(s,self.scales)
         self.s[:] = s
         self.sim.run(self.dt)
         return self.z_pred

@@ -52,6 +52,7 @@ import numpy as np
 
 from types import SimpleNamespace
 import yaml, os
+import pickle
 
 import tensorflow as tf
 
@@ -65,7 +66,9 @@ PATH_TO_MODELS = config["paths"]["PATH_TO_EXPERIMENT_RECORDINGS"] + config['path
 
 #PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\weights_latest_LMU2.npy'
 #PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\weights_latest_LMU3.npy'
-PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\model_weights_new.npy'      # Uses Predictor_LMU2
+#PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\model_weights_new.npy'      # Uses Predictor_LMU2
+PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\model_weights_new_forealyo_good_stuff.npy'
+PATH_TO_STATE = r'.\SNN\pre_trained_weights\model_state.pkl'
 
 class predictor_autoregressive_SNN:
     def __init__(self, horizon=None, batch_size=None, net_name=None):
@@ -78,6 +81,11 @@ class predictor_autoregressive_SNN:
 
         a.net_name = net_name
 
+        with open(PATH_TO_STATE, "rb") as f:
+            model_state = pickle.load(f)
+        self.scales = model_state["scales"]
+        #print(self.scales)
+
         # Create a copy of the network suitable for inference (stateful and with sequence length one)
         self.net_info = snn.NetInfo()
 
@@ -89,7 +97,8 @@ class predictor_autoregressive_SNN:
         lmu_theta = 0.1  # duration of the LMU delay
         lmu_q = 5  # number of factorizations per dim in LMU
 
-        neurons_per_dim = 100  # number of neurons representing each dimension
+        #neurons_per_dim = 100  # number of neurons representing each dimension
+        neurons_per_dim = 200
 
         #weights = 0.00003*np.ones((len(self.net_info.outputs), n_neurons)) # Weights should be read from file (pre-trained model)
         weights = np.load(PATH_TO_SNN_WEIGHTS)
@@ -103,6 +112,7 @@ class predictor_autoregressive_SNN:
 
         self.net = snn.Predictor_LMU2(action_init=np.zeros((len(self.net_info.ctrl_inputs))),
                     state_init=np.zeros((len(self.net_info.state_inputs))),
+                    scales=self.scales,
                     weights=weights,
                     seed=seed,
                     n=neurons_per_dim,
