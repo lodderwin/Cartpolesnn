@@ -67,7 +67,7 @@ PATH_TO_MODELS = config["paths"]["PATH_TO_EXPERIMENT_RECORDINGS"] + config['path
 #PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\weights_latest_LMU3.npy'
 PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\model_weights_new.npy'      # Uses Predictor_LMU2
 
-class predictor_autoregressive_tf_SNN:
+class predictor_autoregressive_SNN:
     def __init__(self, horizon=None, batch_size=None, net_name=None):
 
         a = SimpleNamespace()
@@ -154,16 +154,19 @@ class predictor_autoregressive_tf_SNN:
 
 
     def setup(self, initial_state: np.array, prediction_denorm=True):
-
+        #print(initial_state.shape)
+        #print('That was init_state')
         self.output_array[..., 0, :-1] = initial_state
 
         initial_input_net_without_Q = initial_state[..., [STATE_INDICES.get(key) for key in self.net_info.inputs[1:]]]
         self.net_initial_input_without_Q = normalize_numpy_array(initial_input_net_without_Q, self.net_info.inputs[1:], self.normalization_info)
+        #print(self.net_initial_input_without_Q.shape)
 
         # [1:] excludes Q which is not included in initial_state_normed
         # As the only feature written with big Q it should be first on each list.
         self.net_initial_input_without_Q_TF = tf.convert_to_tensor(self.net_initial_input_without_Q, tf.float32)
         self.net_initial_input_without_Q_TF = tf.reshape(self.net_initial_input_without_Q_TF, [-1, len(self.net_info.inputs[1:])])
+        #print(self.net_initial_input_without_Q_TF.shape)
         if prediction_denorm:
             self.prediction_denorm = True
         else:
@@ -240,7 +243,7 @@ class predictor_autoregressive_tf_SNN:
 
         #net_outputs = tf.TensorArray(tf.float32, size=horizon)
         net_outputs = np.zeros(shape=(self.batch_size,horizon,len(self.net_info.outputs)))
-        net_output = tf.zeros(shape=(len(self.net_info.outputs)), dtype=tf.float32)
+        net_output = np.zeros(shape=(self.batch_size,len(self.net_info.outputs)))
 
         #print(net_output.shape)
 
@@ -250,7 +253,7 @@ class predictor_autoregressive_tf_SNN:
             if i == 0:
                     net_input = (tf.reshape(tf.concat([Q_current, self.net_initial_input_without_Q_TF], axis=1), [-1, 1, len(self.net_info.inputs)])).numpy()
             else:
-                    net_input = tf.reshape(tf.concat([Q_current, net_output], axis=1), [-1, 1, len(self.net_info.inputs)]).numpy()
+                    net_input = tf.reshape(tf.concat([Q_current, tf.convert_to_tensor(net_output, np.float32)], axis=1), [-1, 1, len(self.net_info.inputs)]).numpy()
 
             #print(net_input.shape)  # For GUI is (2000,1,6)
 
@@ -259,19 +262,20 @@ class predictor_autoregressive_tf_SNN:
             for batch in range(self.batch_size):
                 #net_input = net_input[0,0,:]
                 #net_input = np.zeros((len(self.net_info.inputs)))
-                net_output = self.evaluate_net(net_input)
+                net_output[batch,:] = self.evaluate_net(net_input[batch,:,:])
                 #print(net_output.shape)
 
-                net_output = tf.convert_to_tensor(net_output, np.float32)
+                #net_output = tf.convert_to_tensor(net_output, np.float32)
                 #tf.print(net_output)
 
-                net_output = tf.reshape(net_output, [-1, len(self.net_info.outputs)])
-                #net_output = np.reshape(net_output, (-1, len(self.net_info.outputs)))
+                #net_output = tf.reshape(net_output, [-1, len(self.net_info.outputs)])
+                net_output = np.reshape(net_output, (-1, len(self.net_info.outputs)))
                 #tf.print(net_output)
                 #print(net_output.shape)
 
                 #net_outputs = net_outputs.write(i, net_output)
-                net_outputs[batch,i,:] = net_output.numpy()
+                #net_outputs[batch,i,:] = net_output.numpy()
+                net_outputs[:, i, :] = net_output
                 #tf.print(net_outputs)
                 # tf.print(net_inout.read(i+1))
 
@@ -289,8 +293,10 @@ class predictor_autoregressive_tf_SNN:
 
         #net_output = self.net.step(c=c)
         #self.net.reset()
-        a = net_input[:,:,0]
-        s = net_input[:,:,1:]
+        #a = net_input[:,:,0]
+        #s = net_input[:,:,1:]
+        a = net_input[:, 0]
+        s = net_input[:, 1:]
         net_output = self.net.step(a=a,s=s)
         return net_output
 
