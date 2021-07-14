@@ -6,6 +6,8 @@
 
 	.\CartPoleSimulation\SI_Toolkit\Testing\run_brunton_test.py
 
+	.\CartPoleSimulation\Controllers\controller_mppi_spiking.py
+
 	.\CartPoleSimulation\SNN\get_prediction_SNN_predictor.py
 	.\CartPoleSimulation\SNN\predictor_autoregressive_SNN.py
 	.\CartPoleSimulation\SNN\snn_dumy.py
