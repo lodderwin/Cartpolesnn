@@ -52,6 +52,7 @@ import numpy as np
 
 from types import SimpleNamespace
 import yaml, os
+import pickle
 
 import tensorflow as tf
 
@@ -64,9 +65,12 @@ NET_NAME = config['modeling']['NET_NAME']
 PATH_TO_MODELS = config["paths"]["PATH_TO_EXPERIMENT_RECORDINGS"] + config['paths']['path_to_experiment'] + "Models/"
 
 #PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\weights_latest_LMU2.npy'
-PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\model_weights_new.npy'      # Uses Predictor_LMU2
+#PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\weights_latest_LMU3.npy'
+#PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\model_weights_new.npy'      # Uses Predictor_LMU2
+PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\model_weights_new_forealyo_good_stuff.npy'
+PATH_TO_STATE = r'.\SNN\pre_trained_weights\model_state.pkl'
 
-class predictor_autoregressive_tf_SNN:
+class predictor_autoregressive_SNN:
     def __init__(self, horizon=None, batch_size=None, net_name=None):
 
         a = SimpleNamespace()
@@ -76,6 +80,11 @@ class predictor_autoregressive_tf_SNN:
         a.path_to_models = PATH_TO_MODELS
 
         a.net_name = net_name
+
+        with open(PATH_TO_STATE, "rb") as f:
+            model_state = pickle.load(f)
+        self.scales = model_state["scales"]
+        #print(self.scales)
 
         # Create a copy of the network suitable for inference (stateful and with sequence length one)
         self.net_info = snn.NetInfo()
@@ -88,7 +97,8 @@ class predictor_autoregressive_tf_SNN:
         lmu_theta = 0.1  # duration of the LMU delay
         lmu_q = 5  # number of factorizations per dim in LMU
 
-        neurons_per_dim = 50  # number of neurons representing each dimension
+        #neurons_per_dim = 100  # number of neurons representing each dimension
+        neurons_per_dim = 200
 
         #weights = 0.00003*np.ones((len(self.net_info.outputs), n_neurons)) # Weights should be read from file (pre-trained model)
         weights = np.load(PATH_TO_SNN_WEIGHTS)
@@ -102,6 +112,7 @@ class predictor_autoregressive_tf_SNN:
 
         self.net = snn.Predictor_LMU2(action_init=np.zeros((len(self.net_info.ctrl_inputs))),
                     state_init=np.zeros((len(self.net_info.state_inputs))),
+                    scales=self.scales,
                     weights=weights,
                     seed=seed,
                     n=neurons_per_dim,
@@ -153,43 +164,60 @@ class predictor_autoregressive_tf_SNN:
 
 
     def setup(self, initial_state: np.array, prediction_denorm=True):
+        self.batch_size = initial_state.shape[0]
 
-        self.output_array[..., 0, :-1] = initial_state
+        #print(initial_state.shape)
+        #print('That was init_state')
+        #print(self.output_array.shape)
+        #print(initial_state.shape)
+
+        #self.output_array[..., 0, :-1] = initial_state
+        self.output_array[:self.batch_size, 0, :-1] = initial_state
+        #print(self.output_array)
 
         initial_input_net_without_Q = initial_state[..., [STATE_INDICES.get(key) for key in self.net_info.inputs[1:]]]
         self.net_initial_input_without_Q = normalize_numpy_array(initial_input_net_without_Q, self.net_info.inputs[1:], self.normalization_info)
+        #print(self.net_initial_input_without_Q.shape)
 
         # [1:] excludes Q which is not included in initial_state_normed
         # As the only feature written with big Q it should be first on each list.
         self.net_initial_input_without_Q_TF = tf.convert_to_tensor(self.net_initial_input_without_Q, tf.float32)
         self.net_initial_input_without_Q_TF = tf.reshape(self.net_initial_input_without_Q_TF, [-1, len(self.net_info.inputs[1:])])
+        #print(self.net_initial_input_without_Q_TF.shape)
         if prediction_denorm:
             self.prediction_denorm = True
         else:
             self.prediction_denorm = False
 
-        # print('Setup done')
+        #print('Setup done')
 
     def predict(self, Q, single_step=False) -> np.array:
-
+        #print(Q.shape)  #(batch,horizon)
         if single_step:
             output_array = self.output_array_single_step
         else:
             output_array = self.output_array
 
-        output_array[..., :-1, -1] = Q
+        #print(output_array.shape)
+
+        #output_array[..., :-1, -1] = Q
+        output_array[:self.batch_size, :-1, -1] = Q
+        #print('out_array got Q')
 
         # load internal RNN state if applies
         #load_internal_states(self.net, self.rnn_internal_states)
         self.net.set_internal_states(self.snn_internal_states_voltage, 'voltage')
         self.net.set_internal_states(self.snn_internal_states_refractory, 'refractory_time')
-
+        #print('internal states')
 
         net_outputs = self.iterate_net(Q, single_step=single_step)
 
         # Denormalize
+        #output_array[..., 1:, [STATE_INDICES.get(key) for key in self.net_info.outputs]] = \
+            #denormalize_numpy_array(net_outputs.numpy(), self.net_info.outputs, self.normalization_info)
         output_array[..., 1:, [STATE_INDICES.get(key) for key in self.net_info.outputs]] = \
-            denormalize_numpy_array(net_outputs.numpy(), self.net_info.outputs, self.normalization_info)
+            denormalize_numpy_array(net_outputs, self.net_info.outputs, self.normalization_info)
+
         #output_array[..., 1:, [STATE_INDICES.get(key) for key in self.net_info.outputs]] = net_outputs.numpy()
 
         #print(output_array.shape)
@@ -203,6 +231,7 @@ class predictor_autoregressive_tf_SNN:
 
     # @tf.function
     def update_internal_state(self, Q0):
+        #self.batch_size = Q0.shape[0]
         # load internal RNN state
         #load_internal_states(self.net, self.rnn_internal_states)
 
@@ -215,28 +244,37 @@ class predictor_autoregressive_tf_SNN:
             net_input = (tf.reshape(tf.concat([Q0, self.net_initial_input_without_Q_TF], axis=1),
                                     [-1, 1, len(self.net_info.inputs)])).numpy()
 
-        # self.evaluate_net(self.net_current_input) # Using tf.function to compile net
+        #print(net_input.shape)     # (batch,1,in_size)
 
+        # self.evaluate_net(self.net_current_input) # Using tf.function to compile net
+        #print('Evaluating net')
         #self.net(net_input)    # Using net directly
         #self.net.step(c=net_input)     # Using net directly
-        self.net.step(a=net_input[:,:,0],s=net_input[:,:,1:])   # Using net directly
+        for ii in range(self.batch_size):
+            #self.net.step(a=net_input[ii,:,0],s=net_input[ii,:,1:])   # Using net directly
+            self.evaluate_net(net_input[ii, :, :])
+        #print('Net done')
 
         self.snn_internal_states_voltage = self.net.return_internal_states('voltage')
         self.snn_internal_states_refractory = self.net.return_internal_states('refractory_time')
-
+        #print('Got internal states')
         #self.rnn_internal_states = get_internal_states(self.net)
 
     # @tf.function
     def iterate_net_f(self, Q, single_step=False):
+        #print(Q.shape)
+        #self.horizon = Q.shape[0]
 
         if single_step:
             horizon = 1
         else:
             horizon = self.horizon
 
-        net_outputs = tf.TensorArray(tf.float32, size=horizon)
-        #net_outputs = np.zeros(shape=(1,horizon,len(self.net_info.outputs)))
-        net_output = tf.zeros(shape=(len(self.net_info.outputs)), dtype=tf.float32)
+        #net_outputs = tf.TensorArray(tf.float32, size=horizon)
+        net_outputs = np.zeros(shape=(self.batch_size,horizon,len(self.net_info.outputs)))
+        net_output = np.zeros(shape=(self.batch_size,len(self.net_info.outputs)))
+
+        #print(net_output.shape)
 
         for i in tf.range(0, horizon):
             Q_current = Q[..., i]
@@ -244,30 +282,33 @@ class predictor_autoregressive_tf_SNN:
             if i == 0:
                     net_input = (tf.reshape(tf.concat([Q_current, self.net_initial_input_without_Q_TF], axis=1), [-1, 1, len(self.net_info.inputs)])).numpy()
             else:
-                    net_input = tf.reshape(tf.concat([Q_current, net_output], axis=1), [-1, 1, len(self.net_info.inputs)]).numpy()
+                    net_input = tf.reshape(tf.concat([Q_current, tf.convert_to_tensor(net_output, np.float32)], axis=1), [-1, 1, len(self.net_info.inputs)]).numpy()
+
+            #print(net_input.shape)  # For GUI is (2000,1,6)
 
             #net_output = self.net(net_input)
 
-            #net_input = net_input[0,0,:]
-            #net_input = np.zeros((len(self.net_info.inputs)))
-            net_output = self.evaluate_net(net_input)
+            for batch in range(self.batch_size):
+                net_output[batch,:] = self.evaluate_net(net_input[batch,:,:])
+
             #print(net_output.shape)
 
-            net_output = tf.convert_to_tensor(net_output, np.float32)
+            #net_output = tf.convert_to_tensor(net_output, np.float32)
             #tf.print(net_output)
 
-            net_output = tf.reshape(net_output, [-1, len(self.net_info.outputs)])
-            #net_output = np.reshape(net_output, (-1, len(self.net_info.outputs)))
+            #net_output = tf.reshape(net_output, [-1, len(self.net_info.outputs)])
+            net_output = np.reshape(net_output, (-1, len(self.net_info.outputs)))
             #tf.print(net_output)
             #print(net_output.shape)
 
-            net_outputs = net_outputs.write(i, net_output)
-            #net_outputs[:,i,:] = net_output
+            #net_outputs = net_outputs.write(i, net_output)
+            #net_outputs[batch,i,:] = net_output.numpy()
+            net_outputs[:, i, :] = net_output
             #tf.print(net_outputs)
             # tf.print(net_inout.read(i+1))
 
         # print(net_inout)
-        net_outputs = tf.transpose(net_outputs.stack(), perm=[1, 0, 2])
+        #net_outputs = tf.transpose(net_outputs.stack(), perm=[1, 0, 2])
         #print(net_outputs.shape)
 
         return net_outputs
@@ -280,9 +321,15 @@ class predictor_autoregressive_tf_SNN:
 
         #net_output = self.net.step(c=c)
         #self.net.reset()
-        a = net_input[:,:,0]
-        s = net_input[:,:,1:]
+        #a = net_input[:,:,0]
+        #s = net_input[:,:,1:]
+        a = net_input[:, 0]
+        s = net_input[:, 1:]
         net_output = self.net.step(a=a,s=s)
+
+        #net_out_aux = net_output
+        #net_output[2] = net_out_aux[1]
+        #net_output[1] = net_out_aux[2]
         return net_output
 
     @property
