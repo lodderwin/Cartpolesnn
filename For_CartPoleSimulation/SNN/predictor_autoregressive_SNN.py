@@ -164,9 +164,16 @@ class predictor_autoregressive_SNN:
 
 
     def setup(self, initial_state: np.array, prediction_denorm=True):
+        self.batch_size = initial_state.shape[0]
+
         #print(initial_state.shape)
         #print('That was init_state')
-        self.output_array[..., 0, :-1] = initial_state
+        #print(self.output_array.shape)
+        #print(initial_state.shape)
+
+        #self.output_array[..., 0, :-1] = initial_state
+        self.output_array[:self.batch_size, 0, :-1] = initial_state
+        #print(self.output_array)
 
         initial_input_net_without_Q = initial_state[..., [STATE_INDICES.get(key) for key in self.net_info.inputs[1:]]]
         self.net_initial_input_without_Q = normalize_numpy_array(initial_input_net_without_Q, self.net_info.inputs[1:], self.normalization_info)
@@ -182,22 +189,26 @@ class predictor_autoregressive_SNN:
         else:
             self.prediction_denorm = False
 
-        # print('Setup done')
+        #print('Setup done')
 
     def predict(self, Q, single_step=False) -> np.array:
-
+        #print(Q.shape)  #(batch,horizon)
         if single_step:
             output_array = self.output_array_single_step
         else:
             output_array = self.output_array
 
-        output_array[..., :-1, -1] = Q
+        #print(output_array.shape)
+
+        #output_array[..., :-1, -1] = Q
+        output_array[:self.batch_size, :-1, -1] = Q
+        #print('out_array got Q')
 
         # load internal RNN state if applies
         #load_internal_states(self.net, self.rnn_internal_states)
         self.net.set_internal_states(self.snn_internal_states_voltage, 'voltage')
         self.net.set_internal_states(self.snn_internal_states_refractory, 'refractory_time')
-
+        #print('internal states')
 
         net_outputs = self.iterate_net(Q, single_step=single_step)
 
@@ -220,6 +231,7 @@ class predictor_autoregressive_SNN:
 
     # @tf.function
     def update_internal_state(self, Q0):
+        #self.batch_size = Q0.shape[0]
         # load internal RNN state
         #load_internal_states(self.net, self.rnn_internal_states)
 
@@ -232,19 +244,26 @@ class predictor_autoregressive_SNN:
             net_input = (tf.reshape(tf.concat([Q0, self.net_initial_input_without_Q_TF], axis=1),
                                     [-1, 1, len(self.net_info.inputs)])).numpy()
 
-        # self.evaluate_net(self.net_current_input) # Using tf.function to compile net
+        #print(net_input.shape)     # (batch,1,in_size)
 
+        # self.evaluate_net(self.net_current_input) # Using tf.function to compile net
+        #print('Evaluating net')
         #self.net(net_input)    # Using net directly
         #self.net.step(c=net_input)     # Using net directly
-        self.net.step(a=net_input[:,:,0],s=net_input[:,:,1:])   # Using net directly
+        for ii in range(self.batch_size):
+            #self.net.step(a=net_input[ii,:,0],s=net_input[ii,:,1:])   # Using net directly
+            self.evaluate_net(net_input[ii, :, :])
+        #print('Net done')
 
         self.snn_internal_states_voltage = self.net.return_internal_states('voltage')
         self.snn_internal_states_refractory = self.net.return_internal_states('refractory_time')
-
+        #print('Got internal states')
         #self.rnn_internal_states = get_internal_states(self.net)
 
     # @tf.function
     def iterate_net_f(self, Q, single_step=False):
+        #print(Q.shape)
+        #self.horizon = Q.shape[0]
 
         if single_step:
             horizon = 1
@@ -270,24 +289,23 @@ class predictor_autoregressive_SNN:
             #net_output = self.net(net_input)
 
             for batch in range(self.batch_size):
-                #net_input = net_input[0,0,:]
-                #net_input = np.zeros((len(self.net_info.inputs)))
                 net_output[batch,:] = self.evaluate_net(net_input[batch,:,:])
-                #print(net_output.shape)
 
-                #net_output = tf.convert_to_tensor(net_output, np.float32)
-                #tf.print(net_output)
+            #print(net_output.shape)
 
-                #net_output = tf.reshape(net_output, [-1, len(self.net_info.outputs)])
-                net_output = np.reshape(net_output, (-1, len(self.net_info.outputs)))
-                #tf.print(net_output)
-                #print(net_output.shape)
+            #net_output = tf.convert_to_tensor(net_output, np.float32)
+            #tf.print(net_output)
 
-                #net_outputs = net_outputs.write(i, net_output)
-                #net_outputs[batch,i,:] = net_output.numpy()
-                net_outputs[:, i, :] = net_output
-                #tf.print(net_outputs)
-                # tf.print(net_inout.read(i+1))
+            #net_output = tf.reshape(net_output, [-1, len(self.net_info.outputs)])
+            net_output = np.reshape(net_output, (-1, len(self.net_info.outputs)))
+            #tf.print(net_output)
+            #print(net_output.shape)
+
+            #net_outputs = net_outputs.write(i, net_output)
+            #net_outputs[batch,i,:] = net_output.numpy()
+            net_outputs[:, i, :] = net_output
+            #tf.print(net_outputs)
+            # tf.print(net_inout.read(i+1))
 
         # print(net_inout)
         #net_outputs = tf.transpose(net_outputs.stack(), perm=[1, 0, 2])
@@ -308,6 +326,10 @@ class predictor_autoregressive_SNN:
         a = net_input[:, 0]
         s = net_input[:, 1:]
         net_output = self.net.step(a=a,s=s)
+
+        #net_out_aux = net_output
+        #net_output[2] = net_out_aux[1]
+        #net_output[1] = net_out_aux[2]
         return net_output
 
     @property

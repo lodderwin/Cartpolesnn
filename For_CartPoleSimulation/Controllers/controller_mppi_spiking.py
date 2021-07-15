@@ -37,7 +37,7 @@ from numba import jit
 from numpy.random import SFC64, Generator
 from SI_Toolkit_ApplicationSpecificFiles.predictor_ideal import predictor_ideal
 from scipy.interpolate import interp1d
-from SNN.predictor_autoregressive_tf_SNN import (predictor_autoregressive_tf_SNN,)
+from SNN.predictor_autoregressive_SNN import (predictor_autoregressive_SNN,)
 
 from Controllers.template_controller import template_controller
 
@@ -170,7 +170,7 @@ def penalize_deviation(cc, u):
 if predictor_type == "Euler":
     predictor = predictor_ideal(horizon=mpc_samples, dt=dt, intermediate_steps=1)
 elif predictor_type == "NeuralNet":
-    predictor = predictor_autoregressive_tf_SNN(horizon=mpc_samples, batch_size=num_rollouts, net_name=NET_NAME)
+    predictor = predictor_autoregressive_SNN(horizon=mpc_samples, batch_size=num_rollouts, net_name=NET_NAME)
     print('SNN yeah!')
 
 def trajectory_rollouts(
@@ -198,12 +198,15 @@ def trajectory_rollouts(
 
     :return: S_tilde_k - Array filled with a cost for each rollout trajectory
     """
+    #print('Entered Rollouts')
     initial_state = np.tile(s, (num_rollouts, 1))
-
+    #print('Initial state')
+    #print(initial_state.shape) #(batch,num_in)
     predictor.setup(initial_state=initial_state, prediction_denorm=True)
 
     s_horizon = predictor.predict(u + delta_u)[:, :, : len(STATE_INDICES)]
-
+    #print('Predicted')
+    #print(s_horizon)
 
     # Compute stage costs
     cost_increment, dd, ep, ekp, ekc, cc, ccrc = q(
@@ -212,6 +215,7 @@ def trajectory_rollouts(
     S_tilde_k = np.sum(cost_increment, axis=1)
     # Compute terminal cost
     S_tilde_k += phi(s_horizon, target_position)
+    #print('Terminal cost computed')
 
     # Pass costs to GUI popup window
     global gui_dd, gui_ep, gui_ekp, gui_ekc, gui_cc, gui_ccrc
@@ -223,8 +227,11 @@ def trajectory_rollouts(
         np.mean(cc),
         np.mean(ccrc),
     )
+    #print('Costs to GUI passed')
 
     if LOGGING:
+        print('LOGGING')
+
         LOGS.get("cost_breakdown").get("cost_dd").append(np.mean(dd, 0))
         LOGS.get("cost_breakdown").get("cost_ep").append(np.mean(ep, 0))
         LOGS.get("cost_breakdown").get("cost_ekp").append(np.mean(ekp, 0))
@@ -349,7 +356,7 @@ def update_inputs(u: np.ndarray, S: np.ndarray, delta_u: np.ndarray):
     u += reward_weighted_average(S, delta_u)
 
 
-class controller_mppi(template_controller):
+class controller_mppi_spiking(template_controller):
     """Controller implementing the Model Predictive Path Integral method (Williams et al. 2015)
 
     :param template_controller: Superclass describing the basic controller interface
@@ -463,12 +470,15 @@ class controller_mppi(template_controller):
 
         self.iteration += 1
 
+        #print('Step')
+
         # Adjust horizon if changed in GUI while running
         # FIXME: For this to work with NeuralNet predictor we need to build a setter,
         #  which also reinitialize arrays which size depends on horizon
         predictor.horizon = mpc_samples
         if mpc_samples != self.u.size:
             self.update_control_vector()
+        #print('Horizon')
 
         if self.iteration % update_every == 0:
             # Initialize perturbations and cost arrays
@@ -478,6 +488,7 @@ class controller_mppi(template_controller):
                 sampling_type=SAMPLING_TYPE,
             )  # du ~ N(mean=0, var=1/(rho*dt))
             self.S_tilde_k = np.zeros_like(self.S_tilde_k, dtype=np.float32)
+            #print('Perturbations')
 
             # Run parallel trajectory rollouts for different input perturbations
             self.S_tilde_k = trajectory_rollouts(
@@ -488,15 +499,17 @@ class controller_mppi(template_controller):
                 self.u_prev,
                 self.target_position,
             )
+            #print('Trajectory rollouts done')
 
             # Update inputs with weighted perturbations
             update_inputs(self.u, self.S_tilde_k, self.delta_u)
+            #print('Updated input')
 
             # Log states and costs incurred for plotting later
             if LOGGING:
                 LOGS.get("cost_to_go").append(np.copy(self.S_tilde_k))
                 LOGS.get("inputs").append(np.copy(self.u))
-
+                #print('Loggin?')
                 # Simulate nominal rollout to plot the trajectory the controller wants to make
                 # Compute one rollout of shape (mpc_samples + 1) x s.size
                 if predictor_type == "Euler":
@@ -505,10 +518,12 @@ class controller_mppi(template_controller):
                     )
                     rollout_trajectory = predictor.predict(self.u)
                 elif predictor_type == "NeuralNet":
+                    #print('NeuralNet chosen')
                     predictor.setup(
                         initial_state=np.tile(self.s, (num_rollouts, 1)),
                         prediction_denorm=True,
                     )
+                    #print('Step: setup')
                     # This is a lot of unnecessary calculation, but a stateful RNN in TF has frozen batch size
                     rollout_trajectory = predictor.predict(
                         np.tile(self.u, (num_rollouts, 1))
@@ -522,7 +537,7 @@ class controller_mppi(template_controller):
         if (
             self.warm_up_countdown > 0
             and self.auxiliary_controller_available
-            and (NET_TYPE == "GRU" or NET_TYPE == "LSTM" or NET_TYPE == "RNN")
+            and (NET_TYPE == "GRU" or NET_TYPE == "LSTM" or NET_TYPE == "RNN" or NET_TYPE == "SNN")
             and predictor_type == "NeuralNet"
         ):
             self.warm_up_countdown -= 1
@@ -561,7 +576,10 @@ class controller_mppi(template_controller):
 
         # Prepare predictor for next timestep
         Q_update = np.tile(Q, (num_rollouts, 1))
+        #print('Q_update')
+
         predictor.update_internal_state(Q_update)
+        #print('Predictor internal state updated')
 
         return Q  # normed control input in the range [-1,1]
 

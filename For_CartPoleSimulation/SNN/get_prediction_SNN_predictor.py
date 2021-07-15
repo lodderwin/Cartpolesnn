@@ -32,21 +32,21 @@ cdict = {'red':   ((0.0,  0.22, 0.0),
 
 cmap = colors.LinearSegmentedColormap('custom', cdict)
 
-def get_data_for_gui_SNN(a, dataset, net_name):
+def get_data_for_gui_SNN(a, dataset, net_name, mode):
     states_0 = dataset[STATE_VARIABLES].to_numpy()[:-a.test_max_horizon, :]
 
     Q = dataset['Q'].to_numpy()
     Q_array = [Q[i:-a.test_max_horizon+i] for i in range(a.test_max_horizon)]
     Q_array = np.vstack(Q_array).transpose()
 
-    mode = 'batch'
-    #mode = 'sequential'
     if mode == 'batch':
+        print('batch mode')
         # All at once
         predictor = predictor_autoregressive_SNN(horizon=a.test_max_horizon, batch_size=a.test_len, net_name=net_name)
         predictor.setup(initial_state=states_0, prediction_denorm=True)
         output_array = predictor.predict(Q_array)
     elif mode == 'sequential':
+        print('sequential mode')
         predictor = predictor_autoregressive_SNN(horizon=a.test_max_horizon, batch_size=1, net_name=net_name)
 
         # Iteratively (to test internal state update)
@@ -60,6 +60,9 @@ def get_data_for_gui_SNN(a, dataset, net_name):
 
             output_array[timestep,:,:] = predictor.predict(Q_current_timestep)
             predictor.update_internal_state(Q_current_timestep[0, 0])
+
+    else:
+        raise ValueError("Mode should be either 'batch' or 'sequential'")
 
     output_array = output_array[..., [STATE_INDICES.get(key) for key in a.features]+[-1]]
     #print(output_array.shape) # shape = (161,41,7)

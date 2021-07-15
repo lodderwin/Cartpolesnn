@@ -20,16 +20,17 @@ def run_brunton_test():
     config = yaml.load(open(os.path.join('SI_Toolkit_ApplicationSpecificFiles', 'config.yml'), 'r'),
                        Loader=yaml.FullLoader)
 
-    NET_NAME = config['modeling']['NET_NAME']
+    NET_TYPE = config['modeling']['NET_TYPE']
+    BRUNTON_MODE = config['testing']['BRUNTON_MODE']
 
     predictions_list = []
     for test_idx in range(len(a.tests)):
         if a.tests[test_idx] == 'Euler':
             predictions = get_prediction_from_euler_predictor(a, dataset, dataset_sampling_dt, dt_sampling_by_dt_fine=10)
         else:  # Assume this is a neural_network test:
-            if (NET_NAME == 'SNN'):
+            if (NET_TYPE == 'SNN'):
                 print('SNN yeah!')
-                predictions = get_data_for_gui_SNN(a, dataset, net_name=a.tests[test_idx])
+                predictions = get_data_for_gui_SNN(a, dataset, net_name=a.tests[test_idx], mode=BRUNTON_MODE)
             else:
                 predictions = get_data_for_gui_TF(a, dataset, net_name=a.tests[test_idx])
 
