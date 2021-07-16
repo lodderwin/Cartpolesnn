@@ -64,12 +64,13 @@ config = yaml.load(open(os.path.join('SI_Toolkit_ApplicationSpecificFiles', 'con
 NET_NAME = config['modeling']['NET_NAME']
 PATH_TO_MODELS = config["paths"]["PATH_TO_EXPERIMENT_RECORDINGS"] + config['paths']['path_to_experiment'] + "Models/"
 
+
 #PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\weights_latest_LMU2.npy'
 #PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\weights_latest_LMU3.npy'
 #PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\model_weights_new.npy'      # Uses Predictor_LMU2
-PATH_TO_SNN_WEIGHTS = r'.\SNN\pre_trained_weights\model_weights_new_forealyo_good_stuff.npy'
-PATH_TO_STATE = r'.\SNN\pre_trained_weights\model_state.pkl'
-
+# PATH_TO_SNN_WEIGHTS = './SNN/pre_trained_weights/model_weights_new_forealyo_good_stuff.npy'
+PATH_TO_STATE = './SNN/pre_trained_weights/model_state_letsgo.pkl'
+# /Users/erwinlodder/Documents/Aerospacestudy/Thesis/Telluride projects/Cartpolesnn/Cartpolesnn/For_CartPoleSimulation/SNN/pre_trained_weights
 class predictor_autoregressive_SNN:
     def __init__(self, horizon=None, batch_size=None, net_name=None):
 
@@ -83,25 +84,36 @@ class predictor_autoregressive_SNN:
 
         with open(PATH_TO_STATE, "rb") as f:
             model_state = pickle.load(f)
-        self.scales = model_state["scales"]
+            weights = model_state["weights"]
+            self.scales = model_state["scales"]
+            lmu_theta = model_state['lmu_theta']
+            lmu_q = model_state['lmu_q']
+            t_delay = model_state['t_delay']
+            dt = model_state['dt']
+            seed = model_state['seed']
+            state_vars = model_state['state_vars']
+
+
         #print(self.scales)
 
         # Create a copy of the network suitable for inference (stateful and with sequence length one)
         self.net_info = snn.NetInfo()
 
         samp_freq = 50  # cartpole data is recorded at ~50Hz
-        dt = 0.01  # nengo time step
+        # dt = 0.01  # nengo time step
         learning_rate = 0  # lr
-        t_delay = 0.02  # how far to predict the future (initial guess)
-        seed = 4  # to get reproducible neuron properties across runs
-        lmu_theta = 0.1  # duration of the LMU delay
-        lmu_q = 5  # number of factorizations per dim in LMU
+        # t_delay = 0.1  # how far to predict the future (initial guess)
+        # seed = 4  # to get reproducible neuron properties across runs
+        # lmu_theta = 0.1  # duration of the LMU delay
+        # lmu_q = 1  # number of factorizations per dim in LMU
 
+        self.scaling_factors = np.array([self.scales[x] for x in state_vars])
+        print(self.scaling_factors)
         #neurons_per_dim = 100  # number of neurons representing each dimension
-        neurons_per_dim = 200
+        neurons_per_dim = 100
 
         #weights = 0.00003*np.ones((len(self.net_info.outputs), n_neurons)) # Weights should be read from file (pre-trained model)
-        weights = np.load(PATH_TO_SNN_WEIGHTS)
+        # weights = np.load(PATH_TO_SNN_WEIGHTS)
         #print(weights.shape)
 
         #print(self.net_info.ctrl_inputs)
@@ -112,7 +124,8 @@ class predictor_autoregressive_SNN:
 
         self.net = snn.Predictor_LMU2(action_init=np.zeros((len(self.net_info.ctrl_inputs))),
                     state_init=np.zeros((len(self.net_info.state_inputs))),
-                    scales=self.scales,
+                    # scales=self.scales,
+                    scaling_factors=self.scaling_factors,
                     weights=weights,
                     seed=seed,
                     n=neurons_per_dim,
@@ -159,8 +172,8 @@ class predictor_autoregressive_SNN:
 
         print('Init done')
 
-        self.snn_internal_states_voltage = self.net.return_internal_states('voltage')
-        self.snn_internal_states_refractory = self.net.return_internal_states('refractory_time')
+        # self.snn_internal_states_voltage = self.net.return_internal_states('voltage')
+        # self.snn_internal_states_refractory = self.net.return_internal_states('refractory_time')
 
 
     def setup(self, initial_state: np.array, prediction_denorm=True):
@@ -206,8 +219,8 @@ class predictor_autoregressive_SNN:
 
         # load internal RNN state if applies
         #load_internal_states(self.net, self.rnn_internal_states)
-        self.net.set_internal_states(self.snn_internal_states_voltage, 'voltage')
-        self.net.set_internal_states(self.snn_internal_states_refractory, 'refractory_time')
+        # self.net.set_internal_states(self.snn_internal_states_voltage, 'voltage')
+        # self.net.set_internal_states(self.snn_internal_states_refractory, 'refractory_time')
         #print('internal states')
 
         net_outputs = self.iterate_net(Q, single_step=single_step)
@@ -255,8 +268,8 @@ class predictor_autoregressive_SNN:
             self.evaluate_net(net_input[ii, :, :])
         #print('Net done')
 
-        self.snn_internal_states_voltage = self.net.return_internal_states('voltage')
-        self.snn_internal_states_refractory = self.net.return_internal_states('refractory_time')
+        # self.snn_internal_states_voltage = self.net.return_internal_states('voltage')
+        # self.snn_internal_states_refractory = self.net.return_internal_states('refractory_time')
         #print('Got internal states')
         #self.rnn_internal_states = get_internal_states(self.net)
 

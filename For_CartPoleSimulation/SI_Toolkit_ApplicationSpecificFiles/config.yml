@@ -16,8 +16,8 @@ paths:
 training_default:
   # For training closed loop dynamics model:
   control_inputs: ['Q']
-  state_inputs: ['angle_sin', 'angle_cos', 'angleD', 'position', 'positionD']
-  outputs: ['angle_sin', 'angle_cos', 'angleD', 'position', 'positionD']
+  state_inputs: ["angle_cos", "angle_sin", "angleD", "position", "positionD"]
+  outputs: ["angle_cos", "angle_sin", "angleD", "position", "positionD"]
   #state_inputs: ['angle', 'angle_cos', 'angle_sin', 'angleD', 'position', 'positionD']
   #outputs: ['angle', 'angle_cos', 'angle_sin', 'angleD', 'position', 'positionD']
 
@@ -30,5 +30,5 @@ training_default:
 
 testing:
   tests: ['GRU-6IN-32H1-32H2-5OUT-0']  # May be 'Euler', Euler-predictor, name of network or None = 'Dense-16H1-16H2'
-  TEST_FILE: 'Experiment-1.csv'
-  BRUNTON_MODE: 'sequential'
+  TEST_FILE: 'Experiment-3.csv'
+  BRUNTON_MODE: 'batch'
